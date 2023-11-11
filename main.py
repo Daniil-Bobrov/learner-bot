@@ -1,17 +1,23 @@
 import asyncio
+import os
 import random
 
 import telebot.types
 from telebot.async_telebot import AsyncTeleBot
 import database
+import dotenv
 
-bot = AsyncTeleBot(token="6872689037:AAEP1jFJKnwcqi2MnScWCofLy9wNRKJ9plo")
+dotenv.load_dotenv()
+
+
+bot = AsyncTeleBot(token=os.environ.get("TOKEN1"))
 
 words = list()
 db = database.DataBase()
 
 
 def get_user(message: telebot.types.Message):
+    global words
     user_id = message.from_user.id
     user = db.get_user(user_id)
     if user is False or user is None:
@@ -37,28 +43,46 @@ def check_answer(answer, right_answer):
 @bot.message_handler(commands=['start'])
 async def start_training(message: telebot.types.Message):
     user = get_user(message)
-    words = user["words"].split(",")
+    user = database.User(user)
+    words = user.words
+    user.testing = 1
+    user.update(db)
     await bot.send_message(message.chat.id, words[0].lower())
 
 
 @bot.message_handler()
 async def get_message(message):
     user = get_user(message)
-    testing = int(user["testing"])
+    user = database.User(user)
+    testing = user.testing
     if not testing:
         await bot.send_message(message.chat.id, "Error. Fuck yourself please.")
         return Exception
     answer = message.text
-    words = user["words"].split(",")
+    words = user.words
     right_answer: str = words[0]
     if check_answer(answer, right_answer):
-        db.remove_word(user["telegram_id"])
         await bot.send_message(message.chat.id, "Верно")
+        if len(words) == 0:
+            await bot.send_message(message.chat.id, f"""Тренировка закончена!
+Правильных ответов: {user.right_answers}
+Неправильных ответов: {user.wrong_answers}
+Попыток назвать одно слово: {user.wrong_answers / user.right_answers}
+Используйте /start, чтобы начать новую тренировку!""")
+            words = read_words()
+            user.right_answers = 0
+            user.wrong_answers = 0
+            user.testing = 0
+        else:
+            words = words[1:]
+            print(user.__dict__)
+            user.right_answers += 1
     else:
-        await bot.send_message(message.chat.id, "Неверно")
-        db.shuffle_words(user["telegram_id"])
-    user = get_user(message)
-    words = user["words"].split(",")
+        await bot.send_message(message.chat.id, f"Неверно. {right_answer}")
+        user.wrong_answers += 1
+    random.shuffle(words)
+    user.words = words
+    user.update(db)
     await bot.send_message(message.chat.id, words[0].lower())
 
 
