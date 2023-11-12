@@ -9,28 +9,24 @@ import dotenv
 
 dotenv.load_dotenv()
 
-
-bot = AsyncTeleBot(token=os.environ.get("TOKEN1"))
-
-words = list()
+bot = AsyncTeleBot(token=os.environ.get("TOKEN"))
 db = database.DataBase()
 
 
-def get_user(message: telebot.types.Message):
-    global words
-    user_id = message.from_user.id
-    user = db.get_user(user_id)
-    if user is False or user is None:
-        random.shuffle(words)
-        user = db.create_user(user_id, words)
-    return user
-
-
 def read_words():
-    global words
     with open("words.txt", 'r', encoding="utf-8") as words_txt:
         words = words_txt.read().rstrip().split()
     return words
+
+
+def get_user(message: telebot.types.Message):
+    user_id = message.from_user.id
+    user = db.get_user(user_id)
+    if user is False or user is None:
+        words = read_words()
+        random.shuffle(words)
+        user = db.create_user(user_id, words)
+    return user
 
 
 def check_answer(answer, right_answer):
@@ -40,23 +36,46 @@ def check_answer(answer, right_answer):
     return False
 
 
+async def print_stats(message, user):
+    await bot.send_message(message.chat.id, f"""Тренировка закончена!
+Правильных ответов: {user.right_answers}
+Неправильных ответов: {user.wrong_answers}
+Попыток назвать одно слово: {(user.wrong_answers + user.right_answers) / user.right_answers}
+Используйте /start, чтобы начать новую тренировку!""")
+    user.right_answers = 0
+    user.wrong_answers = 0
+    user.testing = 0
+
+
 @bot.message_handler(commands=['start'])
 async def start_training(message: telebot.types.Message):
     user = get_user(message)
     user = database.User(user)
-    words = user.words
     user.testing = 1
+    words = read_words()
+    user.words = words
     user.update(db)
     await bot.send_message(message.chat.id, words[0].lower())
 
 
+@bot.message_handler(commands=['stop'])
+async def stop_training(message: telebot.types.Message):
+    user = get_user(message)
+    user = database.User(user)
+    await print_stats(message, user)
+    user.update(db)
+
+
 @bot.message_handler()
 async def get_message(message):
+    if message.text.lower() == "остановка сука":
+        await bot.send_message(message.chat.id, "Остановка \"твое очко\". Снимай штаны, сейчас будем тебя ебать")
+        return
     user = get_user(message)
     user = database.User(user)
     testing = user.testing
     if not testing:
-        await bot.send_message(message.chat.id, "Error. Fuck yourself please.")
+        await start_training(message)
         return Exception
     answer = message.text
     words = user.words
@@ -64,18 +83,10 @@ async def get_message(message):
     if check_answer(answer, right_answer):
         await bot.send_message(message.chat.id, "Верно")
         if len(words) == 0:
-            await bot.send_message(message.chat.id, f"""Тренировка закончена!
-Правильных ответов: {user.right_answers}
-Неправильных ответов: {user.wrong_answers}
-Попыток назвать одно слово: {user.wrong_answers / user.right_answers}
-Используйте /start, чтобы начать новую тренировку!""")
-            words = read_words()
-            user.right_answers = 0
-            user.wrong_answers = 0
-            user.testing = 0
+            await print_stats(message, user)
+            return
         else:
             words = words[1:]
-            print(user.__dict__)
             user.right_answers += 1
     else:
         await bot.send_message(message.chat.id, f"Неверно. {right_answer}")

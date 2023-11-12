@@ -64,7 +64,6 @@ class User:
     def __init__(self, user: sqlite3.Row):
         for key in user.keys():
             setattr(self, key, user[key])
-        print(self.__dict__)
         self.right_answers = int(self.right_answers)
         self.wrong_answers = int(self.wrong_answers)
         self.testing = int(self.testing)
