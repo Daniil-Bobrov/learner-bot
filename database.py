@@ -30,24 +30,6 @@ class DataBase:
             print('Ошибка чтения в БД', e)
             return False
 
-    def get_words(self, telegram_id):
-        try:
-            self.__cur.execute("SELECT * FROM users WHERE telegram_id = ?",
-                               (telegram_id,))
-            return self.__cur.fetchone()["words"].split(",")
-        except Exception as e:
-            print('Ошибка чтения в БД', e)
-            return False
-
-    def update_words(self, telegram_id, words):
-        try:
-            self.__cur.execute("UPDATE users SET words = ? WHERE telegram_id = ?",
-                               (",".join(words), telegram_id,))
-            self.__db.commit()
-            return True
-        except Exception as e:
-            print('Ошибка удаления из БД', e)
-            return False
 
     def update_user(self, user):
         try:
